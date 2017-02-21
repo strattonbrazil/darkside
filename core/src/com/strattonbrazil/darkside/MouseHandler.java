@@ -33,7 +33,7 @@ public class MouseHandler implements InputProcessor {
     }
     
     public Vector2 mouseDelta() {
-        return mousePos().cpy().sub(_mousePick);
+        return mousePos().cpy().sub(mousePick());
     }
     
     @Override
@@ -63,8 +63,6 @@ public class MouseHandler implements InputProcessor {
 
     @Override
     public boolean touchDragged(int i, int i1, int i2) {
-        
-        
         return true;
     }
 
