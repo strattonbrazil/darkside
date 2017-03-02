@@ -10,15 +10,18 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.VertexAttributes.Usage;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g3d.Material;
 import com.badlogic.gdx.graphics.g3d.Model;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.ModelInstance;
+import com.badlogic.gdx.graphics.g3d.Renderable;
+import com.badlogic.gdx.graphics.g3d.Shader;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.BaseAnimationController.Transform;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
+import com.badlogic.gdx.graphics.g3d.utils.ShaderProvider;
+import com.badlogic.gdx.graphics.glutils.FloatFrameBuffer;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.Quaternion;
@@ -39,8 +42,9 @@ public class DarksideGame extends ApplicationAdapter {
     ModelInstance boxPosZ;
     MouseHandler mouseHandler;
     BitmapFont font;
-    FrameBuffer gameBuffer;
+    FrameBuffer colorBuffer;
     FrameBuffer blurBuffer;
+    ModelBatch modelBatch;
     
     @Override
     public void create() {
@@ -75,6 +79,20 @@ public class DarksideGame extends ApplicationAdapter {
         boxNegZ.transform.translate(0, 0, -SIZE);
         boxPosZ = new ModelInstance(model);
         boxPosZ.transform.translate(0, 0, SIZE);
+        
+        //MultiTargetFrameBuffer foo;
+        //modelBatch = new ModelBatch(Gdx.files.internal("first_vertex.glsl"), Gdx.files.internal("first_fragment.glsl"));
+        modelBatch = new ModelBatch(new ShaderProvider() {
+            public Shader getShader(Renderable renderable) {
+                Shader shader = new ModelShader();
+                shader.init();
+                return shader;
+            }
+            
+            public void dispose() {
+                
+            }
+        });
     }
 
     @Override
@@ -90,7 +108,8 @@ public class DarksideGame extends ApplicationAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
         
         batch.begin();
-        batch.draw(blurBuffer.getColorBufferTexture(), 0, SCREEN_HEIGHT, SCREEN_WIDTH, -SCREEN_HEIGHT); // flip texture right-side up
+        //batch.draw(blurBuffer.getColorBufferTexture(), 0, SCREEN_HEIGHT, SCREEN_WIDTH, -SCREEN_HEIGHT); // flip texture right-side up
+        batch.draw(blurBuffer.getColorBufferTexture(), 0, 0);
         batch.end();
         
         if (mouseHandler.isNavigating()) {
@@ -114,16 +133,19 @@ public class DarksideGame extends ApplicationAdapter {
         final int SCREEN_WIDTH = Gdx.graphics.getWidth();
         final int SCREEN_HEIGHT = Gdx.graphics.getHeight();
 
-        if (gameBuffer == null) {
-            gameBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, SCREEN_WIDTH, SCREEN_HEIGHT, true);
+        if (colorBuffer == null) {
+            //colorBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, SCREEN_WIDTH, SCREEN_HEIGHT, true);
+            //colorBuffer = new GBuffer(Pixmap.Format.RGBA8888, SCREEN_WIDTH, SCREEN_HEIGHT, true);
+            //colorBuffer = new GBuffer(SCREEN_WIDTH, SCREEN_HEIGHT);
+            //colorBuffer = MultiTargetFrameBuffer.create(MultiTargetFrameBuffer.Format.R32F, 2, SCREEN_WIDTH, SCREEN_HEIGHT, true, true);
+            colorBuffer = new FloatFrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, true);
         }
 
-        gameBuffer.begin();
+        colorBuffer.begin();
         
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
         
-        ModelBatch modelBatch = new ModelBatch();
         modelBatch.begin(camera);
         modelBatch.render(ship);
         modelBatch.render(boxNegX);
@@ -134,7 +156,7 @@ public class DarksideGame extends ApplicationAdapter {
         modelBatch.render(boxPosZ);
         modelBatch.end();
         
-        gameBuffer.end();
+        colorBuffer.end();
     }
     
     public void renderMotionBlur() {
@@ -143,6 +165,7 @@ public class DarksideGame extends ApplicationAdapter {
         
         if (blurBuffer == null) {
             blurBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, SCREEN_WIDTH, SCREEN_HEIGHT, true);
+            
         }
         
         blurBuffer.begin();
@@ -150,13 +173,20 @@ public class DarksideGame extends ApplicationAdapter {
         // this is convenient for full-screen quads
         batch = new SpriteBatch();
         
-        String vertexShader = Gdx.files.internal("vertex.glsl").readString();
-        String fragmentShader = Gdx.files.internal("fragment.glsl").readString();
+        String vertexShader = Gdx.files.internal("post_vertex.glsl").readString();
+        String fragmentShader = Gdx.files.internal("post_fragment.glsl").readString();
         ShaderProgram shaderProgram = new ShaderProgram(vertexShader,fragmentShader);
+        
+        Vector2 blurDir = new Vector2(0,0);
+        if (mouseHandler.isNavigating()) {
+            blurDir.x = 0.0002f * mouseHandler.mouseDelta().x;
+            blurDir.y = 0.0002f * mouseHandler.mouseDelta().y;
+        }
         
         batch.begin();
         batch.setShader(shaderProgram);
-        batch.draw(gameBuffer.getColorBufferTexture(), 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        shaderProgram.setUniformf("blurDir", blurDir.x, blurDir.y);
+        batch.draw(colorBuffer.getColorBufferTexture(), 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         batch.setShader(null); // reset to default
         batch.end();
         
