@@ -4,6 +4,7 @@ import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.FPSLogger;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -40,11 +41,15 @@ public class DarksideGame extends ApplicationAdapter {
     ModelInstance boxPosY;
     ModelInstance boxNegZ;
     ModelInstance boxPosZ;
+    ModelInstance sphere;
     MouseHandler mouseHandler;
     BitmapFont font;
-    FrameBuffer colorBuffer;
+    FrameBuffer gBuffer1; // color
+    FrameBuffer gBuffer2; // normals
     FrameBuffer blurBuffer;
-    ModelBatch modelBatch;
+    ModelBatch modelColorPass;
+    ModelBatch modelAttrPass;
+    FPSLogger fpsLogger = new FPSLogger();
     
     @Override
     public void create() {
@@ -80,19 +85,12 @@ public class DarksideGame extends ApplicationAdapter {
         boxPosZ = new ModelInstance(model);
         boxPosZ.transform.translate(0, 0, SIZE);
         
-        //MultiTargetFrameBuffer foo;
-        //modelBatch = new ModelBatch(Gdx.files.internal("first_vertex.glsl"), Gdx.files.internal("first_fragment.glsl"));
-        modelBatch = new ModelBatch(new ShaderProvider() {
-            public Shader getShader(Renderable renderable) {
-                Shader shader = new ModelShader();
-                shader.init();
-                return shader;
-            }
-            
-            public void dispose() {
-                
-            }
-        });
+        model = modelBuilder.createSphere(100, 100, 100, 50, 50, new Material(ColorAttribute.createDiffuse(Color.LIME)), Usage.Position | Usage.Normal);
+        sphere = new ModelInstance(model);
+        sphere.transform.translate(0, 0, SIZE);
+        
+        modelColorPass = new ModelBatch(ModelShader.getShaderProvider(ModelShader.Pass.COLOR_PASS));
+        modelAttrPass = new ModelBatch(ModelShader.getShaderProvider(ModelShader.Pass.ATTR_PASS));
     }
 
     @Override
@@ -127,36 +125,42 @@ public class DarksideGame extends ApplicationAdapter {
             }
             batch.end();
         }
+        
+        //fpsLogger.log();
     }
     
     public void renderScene() {
         final int SCREEN_WIDTH = Gdx.graphics.getWidth();
         final int SCREEN_HEIGHT = Gdx.graphics.getHeight();
 
-        if (colorBuffer == null) {
-            //colorBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, SCREEN_WIDTH, SCREEN_HEIGHT, true);
-            //colorBuffer = new GBuffer(Pixmap.Format.RGBA8888, SCREEN_WIDTH, SCREEN_HEIGHT, true);
-            //colorBuffer = new GBuffer(SCREEN_WIDTH, SCREEN_HEIGHT);
-            //colorBuffer = MultiTargetFrameBuffer.create(MultiTargetFrameBuffer.Format.R32F, 2, SCREEN_WIDTH, SCREEN_HEIGHT, true, true);
-            colorBuffer = new FloatFrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, true);
+        if (gBuffer1 == null) {
+            gBuffer1 = new FloatFrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, true);
+        }
+        if (gBuffer2 == null) {
+            gBuffer2 = new FloatFrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, true);
         }
 
-        colorBuffer.begin();
+        renderScenePass(gBuffer1, modelColorPass);
+    }
+    
+    private void renderScenePass(FrameBuffer buffer, ModelBatch pass) {
+        buffer.begin();
         
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
         
-        modelBatch.begin(camera);
-        modelBatch.render(ship);
-        modelBatch.render(boxNegX);
-        modelBatch.render(boxPosX);
-        modelBatch.render(boxNegY);
-        modelBatch.render(boxPosY);
-        modelBatch.render(boxNegZ);
-        modelBatch.render(boxPosZ);
-        modelBatch.end();
+        pass.begin(camera);
+        pass.render(ship);
+        pass.render(boxNegX);
+        pass.render(boxPosX);
+        pass.render(boxNegY);
+        pass.render(boxPosY);
+        pass.render(boxNegZ);
+        pass.render(boxPosZ);
+        pass.render(sphere);
+        pass.end();
         
-        colorBuffer.end();
+        buffer.end();
     }
     
     public void renderMotionBlur() {
@@ -186,7 +190,7 @@ public class DarksideGame extends ApplicationAdapter {
         batch.begin();
         batch.setShader(shaderProgram);
         shaderProgram.setUniformf("blurDir", blurDir.x, blurDir.y);
-        batch.draw(colorBuffer.getColorBufferTexture(), 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        batch.draw(gBuffer1.getColorBufferTexture(), 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         batch.setShader(null); // reset to default
         batch.end();
         

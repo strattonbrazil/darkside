@@ -10,7 +10,10 @@ import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g3d.Renderable;
 import com.badlogic.gdx.graphics.g3d.Shader;
+import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
+import com.badlogic.gdx.graphics.g3d.shaders.BaseShader;
 import com.badlogic.gdx.graphics.g3d.utils.RenderContext;
+import com.badlogic.gdx.graphics.g3d.utils.ShaderProvider;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.utils.GdxRuntimeException;
 
@@ -18,52 +21,38 @@ import com.badlogic.gdx.utils.GdxRuntimeException;
  *
  * @author stratton
  */
-public class ModelShader implements Shader {
+public class ModelShader extends BaseShader {
 
-    ShaderProgram program;
-    Camera camera;
-    RenderContext context;
-    int u_projTrans;
-    int u_worldTrans;
+    protected final ShaderProgram program;
+    protected final Pass pass;
+
+    public enum Pass {
+        COLOR_PASS,
+        ATTR_PASS
+    };
+
+    public ModelShader(Pass pass) {
+        super();
+
+        this.pass = pass;
+        
+        String vert = getVertexShaderByPass(pass);
+        String frag = getFragmentShaderByPass(pass);
+
+        program = new ShaderProgram(vert, frag);
+
+        if (!program.isCompiled()) {
+            throw new GdxRuntimeException("Couldn't compile shader " + program.getLog());
+        }
+        String log = program.getLog();
+        if (log.length() > 0) {
+            Gdx.app.error("ShaderTest", "Shader compilation log: " + log);
+        }
+    }
 
     @Override
     public void init() {
-        String vert = Gdx.files.internal("first_vertex.glsl").readString();
-        String frag = Gdx.files.internal("first_fragment.glsl").readString();
-        program = new ShaderProgram(vert, frag);
-        System.out.println("created program");
-        System.out.println(program);
-        if (!program.isCompiled()) {
-            throw new GdxRuntimeException(program.getLog());
-        }
-        u_projTrans = program.getUniformLocation("u_projTrans");
-        u_worldTrans = program.getUniformLocation("u_worldTrans");
-    }
-
-    @Override
-    public void dispose() {
-        program.dispose();
-    }
-
-    @Override
-    public void begin(Camera camera, RenderContext context) {
-        this.camera = camera;
-        this.context = context;
-        program.begin();
-        program.setUniformMatrix(u_projTrans, camera.combined);
-        context.setDepthTest(GL20.GL_LEQUAL);
-        context.setCullFace(GL20.GL_BACK);
-    }
-
-    @Override
-    public void render(Renderable renderable) {
-        program.setUniformMatrix(u_worldTrans, renderable.worldTransform);
-        renderable.meshPart.render(program);
-    }
-
-    @Override
-    public void end() {
-        program.end();
+        super.init(program, null);
     }
 
     @Override
@@ -74,5 +63,79 @@ public class ModelShader implements Shader {
     @Override
     public boolean canRender(Renderable instance) {
         return true;
+    }
+
+    protected final int u_projTrans = register(new Uniform("u_projTrans"));
+    protected final int u_worldTrans = register(new Uniform("u_worldTrans"));
+    protected final int u_color = register(new Uniform("u_color"));
+
+    @Override
+    public void begin(Camera camera, RenderContext context) {
+        program.begin();
+        context.setDepthTest(GL20.GL_LEQUAL, 0f, 1f);
+        context.setDepthMask(true);
+        set(u_projTrans, camera.combined);
+    }
+
+    @Override
+    public void render(Renderable renderable) {
+        set(u_worldTrans, renderable.worldTransform);
+
+        if (pass == Pass.COLOR_PASS) {
+            ColorAttribute colorAttr = (ColorAttribute) renderable.material.get(ColorAttribute.Diffuse);
+
+            set(u_color, colorAttr.color);
+        }
+
+        renderable.meshPart.render(program);
+    }
+
+    @Override
+    public void end() {
+        program.end();
+    }
+
+    @Override
+    public void dispose() {
+        super.dispose();
+        program.dispose();
+    }
+
+    public static ShaderProvider getShaderProvider(final Pass pass) {
+        return new ShaderProvider() {
+            Shader shader = null;
+
+            public Shader getShader(Renderable renderable) {
+                if (shader == null) {
+                    shader = new ModelShader(pass);
+                    shader.init();
+                }
+                return shader;
+            }
+
+            public void dispose() {
+                shader.dispose();
+            }
+        };
+    }
+
+    private String getVertexShaderByPass(Pass pass) {
+        if (pass == Pass.COLOR_PASS) {
+            return Gdx.files.internal("first_vertex.glsl").readString();
+        } else if (pass == Pass.ATTR_PASS) {
+            return Gdx.files.internal("second_vertex.glsl").readString();
+        } else {
+            throw new GdxRuntimeException("unsupported pass: " + pass);
+        }
+    }
+
+    private String getFragmentShaderByPass(Pass pass) {
+        if (pass == Pass.COLOR_PASS) {
+            return Gdx.files.internal("first_fragment.glsl").readString();
+        } else if (pass == Pass.ATTR_PASS) {
+            return Gdx.files.internal("second_fragment.glsl").readString();
+        } else {
+            throw new GdxRuntimeException("unsupported pass: " + pass);
+        }
     }
 }
