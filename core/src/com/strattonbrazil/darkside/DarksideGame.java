@@ -16,12 +16,9 @@ import com.badlogic.gdx.graphics.g3d.Material;
 import com.badlogic.gdx.graphics.g3d.Model;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.ModelInstance;
-import com.badlogic.gdx.graphics.g3d.Renderable;
-import com.badlogic.gdx.graphics.g3d.Shader;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.BaseAnimationController.Transform;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
-import com.badlogic.gdx.graphics.g3d.utils.ShaderProvider;
 import com.badlogic.gdx.graphics.glutils.FloatFrameBuffer;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
@@ -141,6 +138,7 @@ public class DarksideGame extends ApplicationAdapter {
         }
 
         renderScenePass(gBuffer1, modelColorPass);
+        renderScenePass(gBuffer2, modelAttrPass);
     }
     
     private void renderScenePass(FrameBuffer buffer, ModelBatch pass) {
@@ -190,6 +188,9 @@ public class DarksideGame extends ApplicationAdapter {
         batch.begin();
         batch.setShader(shaderProgram);
         shaderProgram.setUniformf("blurDir", blurDir.x, blurDir.y);
+        gBuffer2.getColorBufferTexture().bind(1); 
+        shaderProgram.setUniformi("u_texture2", 1);
+        Gdx.gl.glActiveTexture(GL20.GL_TEXTURE0);
         batch.draw(gBuffer1.getColorBufferTexture(), 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         batch.setShader(null); // reset to default
         batch.end();
